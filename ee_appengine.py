@@ -291,29 +291,31 @@ class Timeseries(webapp2.RequestHandler):
         # lat_lon_tuple = zip(UserLatLongX[0::2], UserLatLongX[1::2])
         # print(lat_lon_tuple)
 
+        #### CLOUD MASK FUNCTION 
+        def common_area_func(refl_toa):
+            #### Common area
+            common_area = refl_toa.mask().reduce(ee.call("Reducer.and"))
+            refl_toa = refl_toa.mask(common_area)
+            #### Cloud mask
+            cloud_mask = ee.Algorithms.Landsat.simpleCloudScore(refl_toa) \
+                .select(['cloud']).lt(ee.Image.constant(50))
+            return refl_toa.mask(cloud_mask.mask(cloud_mask))
+
+        #### Function to calc NDVI using .map method
+        def ndvi_calc_L5L7(refl_toa): 
+            refl_toa = common_area_func(refl_toa)
+            ndvi_img = refl_toa.select("B4", "B3").normalizedDifference().select([0],['NDVI'])
+            return ee.Image(ndvi_img.copyProperties(refl_toa,['system:index','system:time_start','system_time_end']))
+
+        def ndvi_calc_L8(refl_toa): 
+            refl_toa = common_area_func(refl_toa)
+            ndvi_img = refl_toa.select("B5", "B4").normalizedDifference().select([0],['NDVI'])
+            return ee.Image(ndvi_img.copyProperties(refl_toa,['system:index','system:time_start','system_time_end']))                
+
         master_dict=[]
-        for i in range(len(UserLat)):
-            #### CLOUD MASK FUNCTION 
-            def common_area_func(refl_toa):
-                #### Common area
-                common_area = refl_toa.mask().reduce(ee.call("Reducer.and"))
-                refl_toa = refl_toa.mask(common_area)
-                #### Cloud mask
-                cloud_mask = ee.Algorithms.Landsat.simpleCloudScore(refl_toa) \
-                    .select(['cloud']).lt(ee.Image.constant(50))
-                return refl_toa.mask(cloud_mask.mask(cloud_mask))
+        for i in range(len(UserLat)):          
 
-            #### Function to calc NDVI using .map method
-            point = ee.Feature.Point(float(UserLong[i]),float(UserLat[i]));
-            def ndvi_calc_L5L7(refl_toa): 
-                refl_toa = common_area_func(refl_toa)
-                ndvi_img = refl_toa.select("B4", "B3").normalizedDifference().select([0],['NDVI'])
-                return ee.Image(ndvi_img.copyProperties(refl_toa,['system:index','system:time_start','system_time_end']))
-
-            def ndvi_calc_L8(refl_toa): 
-                refl_toa = common_area_func(refl_toa)
-                ndvi_img = refl_toa.select("B5", "B4").normalizedDifference().select([0],['NDVI'])
-                return ee.Image(ndvi_img.copyProperties(refl_toa,['system:index','system:time_start','system_time_end']))
+            point = ee.Feature.Point(float(UserLong[i]),float(UserLat[i]));            
 
             #### MERGE COLLECTIONS FOR TIME PERIOD AND LAT/LON POINT
             l5_coll = ee.ImageCollection('LT5_L1T_TOA').filterBounds(point).filterDate(startdate, enddate);
